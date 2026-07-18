@@ -24,7 +24,10 @@
   }
   body {
     display: flex; flex-direction: column;
-    height: 100dvh; height: 100vh;
+    height: 100vh;
+  }
+  @supports (height: 100dvh) {
+    body { height: 100dvh; }
   }
   #board-wrap {
     position: relative;
