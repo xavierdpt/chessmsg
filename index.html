@@ -122,6 +122,30 @@
   }
   .row .score-cells.good .score-cell { background: rgba(102, 41, 102, 0.7); }
   .row .score-cells.bad  .score-cell { background: rgba(220, 20, 60, 0.7); }
+  .sq.src-highlight { box-shadow: inset 0 0 0 3px var(--accent); }
+  .sq.dst-highlight { box-shadow: inset 0 0 0 3px rgba(76, 175, 80, 0.85); }
+  .sq.src-highlight.dst-highlight {
+    box-shadow: inset 0 0 0 3px var(--accent),
+                inset 0 0 0 6px rgba(76, 175, 80, 0.85);
+  }
+  .promo-popup {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  .promo-popup.hidden { display: none; }
+  .promo-card {
+    background: white; padding: 12px; border-radius: 6px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .promo-buttons { display: flex; gap: 6px; }
+  .promo-buttons button {
+    padding: 4px; border: 1px solid #ddd;
+    background: #fff; cursor: pointer;
+  }
+  .promo-buttons img { width: 48px; height: 48px; }
+  .promo-cancel { padding: 6px 12px; }
   #share {
     width: 100%;
     padding: 12px 16px;
@@ -147,6 +171,14 @@
   <div id="moves" role="list"></div>
 </div>
 <button id="share" disabled>Share</button>
+
+<div id="promo-popup" class="promo-popup hidden" role="dialog" aria-label="Choose promotion piece">
+  <div class="promo-card">
+    <div class="promo-title">Promote to…</div>
+    <div class="promo-buttons"></div>
+    <button class="promo-cancel" type="button" aria-label="Cancel">Cancel</button>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chess.js@0.12.0/chess.min.js" defer></script>
 <script src="script.js" defer></script>

@@ -3,14 +3,72 @@
 
   const FILES = ["a","b","c","d","e","f","g","h"];
 
+  const PREFS = {
+    A1_CLEAR_SOURCE_ON_OPP_NOT_DEST:  true,
+    A4_ROUTERIGHT_BEATS_SOURCESQ:     true,
+    A8_DEMOTE_PICKED_ON_REDEST_TAP:   true,
+    A10_REARM_SOURCE_ON_SAME_TAP:     true,
+    A11_TAPS_ALLOWED_DURING_SEARCH:   true,
+    A12_TOGGLE_PREVIEW_CLEARS_SOURCE: true,
+
+    ENABLE_PROMOTION_POPUP:           true,
+    PROMOTION_DEFAULT_PIECE:          "q",
+    PROMOTION_CANCEL_CLEARS_SOURCE:   true,
+    PROMOTION_PIECE_ORDER:            ["q", "r", "b", "n"],
+    ROW_LIST_SHOWS_ALL_PROMOTIONS:    false,
+
+    HIGHLIGHT_STYLE:                  "ring",
+    HAPTIC_ON_PROMOTION_PICK:         false,
+
+    SOURCE_TOGGLE_REQUIRES_SAME_SQ:   true,
+    RESIZE_REDRAWS_ARROW:             true,
+    PROMOTE_REQUIRES_PAWN_ON_7TH:     true,
+  };
+
   function pieceImageSrc(cell) {
-    const typePart = cell.type.toUpperCase();
     const colorPart = cell.color === "w" ? "w" : "b";
+    const typePart = cell.type.toUpperCase();
     return "img/pieces/" + colorPart + typePart + ".png";
   }
 
-  let chess, baseChess, san, pickedSan, previewSan, rowData;
+  function promotionImageSrc(color, pieceCode) {
+    return "img/pieces/" + (color === "w" ? "w" : "b") + pieceCode.toUpperCase() + ".png";
+  }
+
+  let chess, baseChess, san, pickedSan, previewSan, rowData, sourceSq;
   const $ = (s) => document.querySelector(s);
+
+  function isPromotionMove(fromUci, toUci) {
+    if (!PREFS.PROMOTE_REQUIRES_PAWN_ON_7TH) return false;
+    const fromCell = baseChess.get(fromUci);
+    if (!fromCell || fromCell.type !== "p") return false;
+    const turn = baseChess.turn();
+    const toRank = parseInt(toUci[1], 10);
+    if (turn === "w") return fromUci[1] === "7" && toRank === 8;
+    return fromUci[1] === "2" && toRank === 1;
+  }
+
+  function destSquaresFrom(fromUci) {
+    const out = [];
+    const verbose = baseChess.moves({ verbose: true });
+    for (const m of verbose) {
+      if (m.from !== fromUci) continue;
+      out.push(m.to);
+    }
+    return out;
+  }
+
+  function rowForSourceDest(fromUci, toUci) {
+    const prefix = fromUci + toUci;
+    const queenOnly = rowData.find((r) => r.uci === prefix + "q");
+    if (queenOnly) return queenOnly;
+    return rowData.find((r) => r.uci.slice(0, 4) === prefix);
+  }
+
+  function rowIndexForSan(s) {
+    if (!s) return -1;
+    return rowData.findIndex((r) => r.san === s);
+  }
 
   function parseInitialSan() {
     const v = new URLSearchParams(location.search).get("san");
@@ -62,6 +120,7 @@
           : FILES[f] + (8 - r);
         sq.dataset.uci = uci;
         sq.dataset.idx = (r * 8 + f);
+        sq.onclick = function () { onSquareClick(sq.dataset.uci); };
         if (cell) {
           const span = document.createElement("span");
           span.className = "p";
@@ -189,17 +248,32 @@
 
   function loadMoveRows() {
     const verbose = baseChess.moves({ verbose: true });
-    rowData = verbose.map((m) => {
+    const out = [];
+    for (const m of verbose) {
       const fromIdx = cellIndex(m.from[0], m.from[1]);
       const toIdx   = cellIndex(m.to[0],   m.to[1]);
-      return {
-        san: m.san,
-        uci: m.from + m.to + (m.promotion || ""),
-        fromIdx,
-        toIdx,
-        label: null,
-      };
-    });
+      if (m.promotion && PREFS.ROW_LIST_SHOWS_ALL_PROMOTIONS) {
+        const suffixes = PREFS.PROMOTION_PIECE_ORDER;
+        for (const piece of suffixes) {
+          out.push({
+            san: m.san.replace(/=./, "=" + piece.toUpperCase()),
+            uci: m.from + m.to + piece,
+            fromIdx,
+            toIdx,
+            label: null,
+          });
+        }
+      } else {
+        out.push({
+          san: m.san,
+          uci: m.from + m.to + (m.promotion || ""),
+          fromIdx,
+          toIdx,
+          label: null,
+        });
+      }
+    }
+    rowData = out;
   }
 
   function cpBarWidth(label, turn) {
@@ -388,6 +462,7 @@
 
   function rerender() {
     buildBoard();
+    applySquareHighlights();
     renderMoveList();
     const activeSan = previewSan || pickedSan;
     const activeRow = activeSan ? rowData.find((r) => r.san === activeSan) : null;
@@ -396,7 +471,48 @@
     } else {
       clearArrows();
     }
+    scrollActiveRowIntoView();
     updateShare();
+  }
+
+  function applySquareHighlights() {
+    const style = PREFS.HIGHLIGHT_STYLE;
+    const srcClass = style === "ring-yellow" ? "src-highlight-y" : "src-highlight";
+    const dstClass = style === "ring-yellow" ? "dst-highlight-y" : "dst-highlight";
+    const all = document.querySelectorAll("#board .sq");
+    all.forEach((el) => {
+      el.classList.remove(srcClass, dstClass);
+    });
+    if (!sourceSq) return;
+    const src = document.querySelector('#board .sq[data-uci="' + cssEscape(sourceSq) + '"]');
+    if (src) src.classList.add(srcClass);
+    const dests = destSquaresFrom(sourceSq);
+    for (const d of dests) {
+      const el = document.querySelector('#board .sq[data-uci="' + cssEscape(d) + '"]');
+      if (el) el.classList.add(dstClass);
+    }
+  }
+
+  function cssEscape(s) {
+    if (window.CSS && window.CSS.escape) return window.CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function scrollActiveRowIntoView() {
+    const activeSan = previewSan || pickedSan;
+    if (!activeSan) return;
+    const list = $("#moves");
+    if (!list) return;
+    const rows = list.querySelectorAll(".row");
+    for (const rowEl of rows) {
+      const sanEl = rowEl.querySelector(".san");
+      if (sanEl && sanEl.textContent === activeSan) {
+        if (typeof rowEl.scrollIntoView === "function") {
+          rowEl.scrollIntoView({ block: "nearest" });
+        }
+        return;
+      }
+    }
   }
 
   function updateShare() {
@@ -411,12 +527,14 @@
     if (previewSan === row.san) {
       previewSan = null;
       pickedSan = null;
+      if (PREFS.A12_TOGGLE_PREVIEW_CLEARS_SOURCE) sourceSq = null;
       chess = new Chess(baseChess.fen());
       rerender();
       return;
     }
     pickedSan = null;
     previewSan = row.san;
+    sourceSq = null;
     chess = new Chess(baseChess.fen());
     drawArrow(row.fromIdx, row.toIdx);
     rerender();
@@ -428,12 +546,14 @@
     if (pickedSan === row.san) {
       pickedSan = null;
       previewSan = null;
+      if (PREFS.A4_ROUTERIGHT_BEATS_SOURCESQ) sourceSq = null;
       chess = new Chess(baseChess.fen());
       rerender();
       return;
     }
     pickedSan = row.san;
     previewSan = null;
+    if (PREFS.A4_ROUTERIGHT_BEATS_SOURCESQ) sourceSq = null;
     chess = new Chess(baseChess.fen());
     const from = idxToSq(row.fromIdx);
     const to   = idxToSq(row.toIdx);
@@ -447,6 +567,185 @@
       return;
     }
     rerender();
+  }
+
+  function onSquareClick(uci) {
+    if (!uci) return;
+    if (sfBusy && !PREFS.A11_TAPS_ALLOWED_DURING_SEARCH) return;
+
+    const cell = baseChess.get(uci);
+    const isMine = cell && cell.color === baseChess.turn();
+    const isOpp  = cell && cell.color !== baseChess.turn();
+
+    if (sourceSq) {
+      if (uci === sourceSq) {
+        sourceSq = null;
+        if (PREFS.SOURCE_TOGGLE_REQUIRES_SAME_SQ) {
+          rerender();
+          return;
+        }
+      }
+      if (isMine) {
+        sourceSq = uci;
+        rerender();
+        return;
+      }
+      const dests = destSquaresFrom(sourceSq);
+      const isDest = dests.indexOf(uci) !== -1;
+      if (isDest) {
+        if (isPromotionMove(sourceSq, uci)) {
+          if (PREFS.ENABLE_PROMOTION_POPUP) {
+            showPromotionPopup(sourceSq, uci);
+            return;
+          }
+          previewPromotion(sourceSq, uci, PREFS.PROMOTION_DEFAULT_PIECE);
+          return;
+        }
+        const row = rowForSourceDest(sourceSq, uci);
+        if (row) {
+          const idx = rowIndexForSan(row.san);
+          previewMove(idx);
+          return;
+        }
+        sourceSq = null;
+        rerender();
+        return;
+      }
+      if (isOpp) {
+        sourceSq = null;
+        rerender();
+        return;
+      }
+      sourceSq = null;
+      rerender();
+      return;
+    }
+
+    if (pickedSan && isMine && isA10ReArmOnSameTap(uci)) {
+      sourceSq = uci;
+      rerender();
+      return;
+    }
+    if ((pickedSan || previewSan) && PREFS.A8_DEMOTE_PICKED_ON_REDEST_TAP && !isMine) {
+      const activeSan = pickedSan || previewSan;
+      const activeIdx = rowIndexForSan(activeSan);
+      const activeRow = activeIdx >= 0 ? rowData[activeIdx] : null;
+      if (activeRow) {
+        const activeTo = idxToSq(activeRow.toIdx);
+        if (uci === activeTo) {
+          pickedSan = null;
+          previewSan = null;
+          chess = new Chess(baseChess.fen());
+          clearArrows();
+          rerender();
+          return;
+        }
+      }
+    }
+    if (isMine) {
+      sourceSq = uci;
+      rerender();
+      return;
+    }
+  }
+
+  function isA10ReArmOnSameTap(uci) {
+    if (!PREFS.A10_REARM_SOURCE_ON_SAME_TAP) return false;
+    const san = previewSan || pickedSan;
+    if (!san) return false;
+    const row = rowData.find((r) => r.san === san);
+    if (!row) return false;
+    return idxToSq(row.fromIdx) === uci;
+  }
+
+  function previewPromotion(fromUci, toUci, pieceCode) {
+    const res = baseChess.move({ from: fromUci, to: toUci, promotion: pieceCode });
+    if (!res) {
+      baseChess.undo();
+      return false;
+    }
+    const san = res.san;
+    baseChess.undo();
+    sourceSq = null;
+    pickedSan = null;
+    previewSan = san;
+    chess = new Chess(baseChess.fen());
+    const fromIdx = cellIndex(fromUci[0], fromUci[1]);
+    const toIdx   = cellIndex(toUci[0],   toUci[1]);
+    drawArrow(fromIdx, toIdx);
+    if (PREFS.HAPTIC_ON_PROMOTION_PICK && navigator.vibrate) {
+      try { navigator.vibrate(20); } catch (_) {}
+    }
+    rerender();
+    return true;
+  }
+
+  function showPromotionPopup(fromUci, toUci) {
+    const popup = $("#promo-popup");
+    if (!popup) {
+      previewPromotion(fromUci, toUci, PREFS.PROMOTION_DEFAULT_PIECE);
+      return;
+    }
+    const buttonsWrap = popup.querySelector(".promo-buttons");
+    const cancelBtn = popup.querySelector(".promo-cancel");
+    if (!buttonsWrap) return;
+    buttonsWrap.innerHTML = "";
+    const color = baseChess.turn();
+    popup.dataset.fromUci = fromUci;
+    popup.dataset.toUci = toUci;
+    for (const piece of PREFS.PROMOTION_PIECE_ORDER) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const img = document.createElement("img");
+      img.src = promotionImageSrc(color, piece);
+      img.alt = piece.toUpperCase();
+      btn.appendChild(img);
+      btn.addEventListener("click", function () {
+        const f = popup.dataset.fromUci;
+        const t = popup.dataset.toUci;
+        hidePromotionPopup();
+        previewPromotion(f, t, piece);
+      });
+      buttonsWrap.appendChild(btn);
+    }
+    popup.classList.remove("hidden");
+    if (cancelBtn) {
+      cancelBtn.onclick = function () {
+        hidePromotionPopup();
+        if (PREFS.PROMOTION_CANCEL_CLEARS_SOURCE) {
+          sourceSq = null;
+          rerender();
+        }
+      };
+    }
+    popup.onclick = function (e) {
+      if (e && e.target === popup) {
+        hidePromotionPopup();
+        if (PREFS.PROMOTION_CANCEL_CLEARS_SOURCE) {
+          sourceSq = null;
+          rerender();
+        }
+      }
+    };
+  }
+
+  function hidePromotionPopup() {
+    const popup = $("#promo-popup");
+    if (!popup) return;
+    popup.classList.add("hidden");
+  }
+
+  function isPromotionPopupOpen() {
+    const popup = $("#promo-popup");
+    return !!(popup && !popup.classList.contains("hidden"));
+  }
+
+  function cancelPromotionPopup() {
+    hidePromotionPopup();
+    if (PREFS.PROMOTION_CANCEL_CLEARS_SOURCE) {
+      sourceSq = null;
+      rerender();
+    }
   }
 
   function shareUrl() {
@@ -550,6 +849,8 @@
   function init() {
     san = parseInitialSan();
     pickedSan = null;
+    previewSan = null;
+    sourceSq = null;
     baseChess = new Chess();
     if (san.length && !replaySan(baseChess, san)) {
       baseChess = new Chess();
@@ -568,6 +869,10 @@
     });
     document.addEventListener("keydown", function (e) {
       if (!e) return;
+      if (e.key === "Escape" && isPromotionPopupOpen()) {
+        cancelPromotionPopup();
+        return;
+      }
       if (e.key === "k" || e.key === "K") {
         runKeyTest();
       }
