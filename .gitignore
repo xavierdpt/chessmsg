@@ -1,0 +1,5 @@
+/.idea/
+/server.log
+/server.pid
+/server/target/
+/lowspec.properties
