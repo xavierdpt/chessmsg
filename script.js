@@ -228,14 +228,11 @@
 
   function fmtScore(label, turn) {
     if (!label) return "-";
-    let num;
+    let num = label.value;
+    if (turn === "b") num = -num;
     if (label.kind === "cp") {
-      num = label.value;
-      if (turn === "b") num = -num;
       return "cp " + (num >= 0 ? "+" : "") + (num / 100).toFixed(2);
     }
-    num = label.value;
-    if (turn === "b") num = -num;
     return "mate " + (num >= 0 ? "+" : "") + num;
   }
 
@@ -361,6 +358,84 @@
     } catch (e) {
       console.log("[K] exception during live SAN replay: " + (e && e.message ? e.message : e));
     }
+    console.groupEnd();
+  }
+
+  function runScoreBarConsistencyTests() {
+    console.group("[T] Score bar consistency");
+
+    let allPass = true;
+
+    function record(name, desc, san, label, turn, ok, width, barOp, text, textSign) {
+      if (!ok) allPass = false;
+      console.log("[T] " + JSON.stringify({
+        name,
+        desc,
+        san,
+        label,
+        turn,
+        widthPct: width,
+        widthExpect: barOp,
+        text,
+        textExpect: textSign,
+        pass: ok ? "PASS" : "FAIL",
+      }));
+      if (!ok) console.error("[T] FAIL: " + name);
+    }
+
+    {
+      const c = new Chess();
+      const moves = c.moves({ verbose: true });
+      const g4 = moves.find((m) => m.from === "g2" && m.to === "g4");
+      if (!g4) {
+        console.error("[T] FAIL scenario-1 setup: g4 not in initial position");
+        allPass = false;
+      } else {
+        const label = { kind: "cp", value: -150 };
+        const turn = "w";
+        const width = cpBarWidth(label);
+        const text = fmtScore(label, turn);
+        const barOk = width > 50;
+        const textOk = text.indexOf("-") !== -1;
+        record(
+          "scenario-1",
+          "initial position, white-to-move, g4, black-advantage (side-to-move losing)",
+          g4.san, label, turn, barOk && textOk,
+          width, ">50 (more black visible)", text, "negative (side-to-move losing)"
+        );
+      }
+    }
+
+    {
+      const c = new Chess();
+      const r = c.move("d4");
+      if (!r) {
+        console.error("[T] FAIL scenario-2 setup: d4 not legal");
+        allPass = false;
+      } else {
+        const moves = c.moves({ verbose: true });
+        const nh6 = moves.find((m) => m.from === "g8" && m.to === "h6");
+        if (!nh6) {
+          console.error("[T] FAIL scenario-2 setup: Nh6 not legal after d4");
+          allPass = false;
+        } else {
+          const label = { kind: "cp", value: 200 };
+          const turn = "b";
+          const width = cpBarWidth(label);
+          const text = fmtScore(label, turn);
+          const barOk = width < 50;
+          const textOk = text.indexOf("-") !== -1 && text.indexOf("+") === -1;
+          record(
+            "scenario-2",
+            "after d4, black-to-move, Nh6, white-advantage (side-to-move losing)",
+            nh6.san, label, turn, barOk && textOk,
+            width, "<50 (more white visible)", text, "negative (side-to-move losing)"
+          );
+        }
+      }
+    }
+
+    console.log("[T] " + (allPass ? "ALL PASS" : "AT LEAST ONE FAIL"));
     console.groupEnd();
   }
 
@@ -741,11 +816,11 @@
   async function doShare() {
     if (!pickedSan) return;
     const url = shareUrl();
-    const title = "It's your turn to move";
-    const text = title + " — " + url;
+    const color = baseChess.turn() === "w" ? "White" : "Black";
+    const title = color + " played " + pickedSan + ", it's your turn to move";
     try {
       if (navigator.share) {
-        await navigator.share({ title, text, url });
+        await navigator.share({ title, text: title, url });
         return;
       }
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -778,7 +853,9 @@
     } else if (line.indexOf("info depth 15") === 0) {
       const m = /score (cp|mate) (-?\d+)/.exec(line);
       if (m) {
-        sfLastInfo = { kind: m[1], value: parseInt(m[2], 10) };
+        const raw = parseInt(m[2], 10);
+        const normalized = baseChess.turn() === "b" ? -raw : raw;
+        sfLastInfo = { kind: m[1], value: normalized };
       }
     } else if (line.indexOf("bestmove") === 0) {
       if (sfBusySan && sfLastInfo) {
@@ -929,6 +1006,7 @@
       }
       if (e.key === "k" || e.key === "K") {
         runKeyTest();
+        runScoreBarConsistencyTests();
       }
     });
     initStockfish();
