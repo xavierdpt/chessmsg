@@ -67,39 +67,41 @@
     pointer-events: none;
   }
   #arrows path { fill: var(--arrow); }
-  #moves-wrap {
+  #list-row {
     flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
+    display: flex;
     border-top: 1px solid #e5e5e5;
     border-bottom: 1px solid #e5e5e5;
+  }
+  #moves-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
+    position: relative;
   }
-  #moves { display: block; }
+  #moves { display: grid; grid-template-columns: auto auto minmax(0, 1fr); }
   .row {
-    display: flex;
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
     font-size: 15px;
     border-bottom: 1px solid rgba(46, 125, 50, 0.30);
+    padding: 4px 8px;
+    align-items: center;
+    column-gap: 6px;
   }
   .row:last-child { border-bottom: none; }
-  .row > div {
-    padding: 4px 8px;
-    display: flex;
-    align-items: center;
-  }
-  .row .left  { flex: 3; text-align: left; }
-  .row .right { flex: 1; background: rgba(76, 175, 80, 0.12); }
-  .row.left-clicked .left  { background: rgba(76, 175, 80, 0.30); }
-  .row.right-clicked .right { background: rgba(46, 125, 50, 0.55); }
-  .row .san   { font-weight: 600; }
-  .row .score { color: #888; font-size: 13px; margin-left: 6px; white-space: nowrap; flex-shrink: 0; }
-  .row .san     { flex-shrink: 0; }
+  .row.selected { background: rgba(46, 125, 50, 0.55); }
+  .row .san   { font-weight: 600; visibility: hidden; white-space: nowrap; }
+  .row.selected .san { visibility: visible; }
+  .row .score { color: #888; font-size: 13px; white-space: nowrap; }
   .row .score-bar {
     position: relative;
-    flex: 0 0 auto;
     align-self: stretch;
-    margin-left: auto;
     background: white;
     border: 1px solid #ccc;
   }
@@ -112,8 +114,8 @@
   .row .score-cells {
     display: inline-flex;
     gap: 2px;
-    margin-left: 6px;
     vertical-align: middle;
+    align-self: center;
   }
   .row .score-cell {
     display: inline-block;
@@ -122,6 +124,37 @@
   }
   .row .score-cells.good .score-cell { background: rgba(102, 41, 102, 0.7); }
   .row .score-cells.bad  .score-cell { background: rgba(220, 20, 60, 0.7); }
+  #minibar {
+    flex: 0 0 auto;
+    width: 8px;
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    background: transparent;
+  }
+  .mini-rect {
+    display: block;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.10);
+    border-top: 1px solid rgba(255, 255, 255, 0.6);
+    box-sizing: border-box;
+  }
+  .mini-rect:first-child { border-top: none; }
+  .mini-rect.on { background: rgba(46, 125, 50, 0.85); }
+  #engine-status {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.04);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 13px;
+    color: #888;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #engine-status[hidden] { display: none; }
   .sq.src-highlight { box-shadow: inset 0 0 0 3px var(--accent); }
   .sq.dst-highlight { box-shadow: inset 0 0 0 3px rgba(76, 175, 80, 0.85); }
   .sq.src-highlight.dst-highlight {
@@ -146,16 +179,102 @@
   }
   .promo-buttons img { width: 48px; height: 48px; }
   .promo-cancel { padding: 6px 12px; }
+  #share-row {
+    flex: 0 0 auto;
+    display: flex;
+  }
   #share {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 48px;
     padding: 12px 16px;
     font-size: 16px; font-weight: 600;
     border: none; border-radius: 0;
     background: var(--accent); color: #fff;
     cursor: pointer;
-    flex: 0 0 auto;
   }
   #share[disabled] { background: #999; }
+  #discord {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #5865F2;
+    border: none; border-radius: 0;
+    padding: 0;
+    font: inherit; color: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #discord:hover    { background: #4752C4; }
+  #discord:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: -2px;
+  }
+  #discord svg {
+    width: 28px;
+    height: 28px;
+    fill: #fff;
+    display: block;
+  }
+  .discord-popup {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 60;
+  }
+  .discord-popup.hidden { display: none; }
+  .discord-card {
+    background: #fff; padding: 12px; border-radius: 6px;
+    display: flex; flex-direction: column; gap: 8px;
+    width: min(420px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .discord-title {
+    font-size: 16px; font-weight: 600; color: #222;
+  }
+  .discord-frame-wrap {
+    position: relative;
+    width: 100%;
+    height: 480px;
+    background: #f6f6f6;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #discord-frame {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: 0;
+    display: block;
+  }
+  #discord-frame.hidden { display: none; }
+  .discord-fallback {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+  }
+  .discord-fallback code {
+    background: #eee; padding: 1px 4px; border-radius: 3px;
+    font-size: 12px;
+  }
+  .discord-fallback.hidden { display: none; }
+  .discord-close {
+    align-self: flex-end;
+    padding: 6px 12px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    background: #fff; color: #222;
+    border-radius: 4px;
+    cursor: pointer;
+  }
   @media (max-width: 360px) {
     :root { --cell: 11.5vw; }
     .row { font-size: 14px; }
@@ -167,16 +286,48 @@
   <div id="board" role="grid" aria-label="chess board"></div>
   <svg id="arrows" preserveAspectRatio="none"></svg>
 </div>
-<div id="moves-wrap">
-  <div id="moves" role="list"></div>
+<div id="list-row">
+  <div id="moves-wrap">
+    <div id="engine-status" hidden></div>
+    <div id="moves" role="list"></div>
+  </div>
+  <div id="minibar" aria-hidden="true"></div>
 </div>
-<button id="share" disabled>Share</button>
+<div id="share-row">
+  <button id="discord" type="button"
+          aria-label="Join the chessmsg Discord server"
+          title="Join the chessmsg Discord server">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
+      <path d="M20.317 4.369A19.79 19.79 0 0 0 16.558 3a.075.075 0 0 0-.079.037c-.34.6-.715 1.385-.978 2.005a18.27 18.27 0 0 0-5.487 0c-.264-.62-.65-1.405-.99-2.005a.077.077 0 0 0-.079-.037A19.74 19.74 0 0 0 5.183 4.369a.07.07 0 0 0-.032.027C2.533 8.045 1.673 11.61 2.095 15.13a.082.082 0 0 0 .031.056 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.11 13.11 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.371-.291a.074.074 0 0 1 .077-.01c3.927 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.245.198.372.292a.077.077 0 0 1-.006.127c-.598.349-1.225.645-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.055c.5-4.156-.838-7.692-3.549-10.734a.06.06 0 0 0-.031-.028zM8.02 12.99c-1.182 0-2.157-1.085-2.157-2.42 0-1.333.956-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.335-.956 2.42-2.157 2.42zm7.974 0c-1.183 0-2.157-1.085-2.157-2.42 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.094 2.157 2.418 0 1.335-.946 2.42-2.157 2.42z"/>
+    </svg>
+  </button>
+  <button id="share" disabled>Share</button>
+</div>
 
 <div id="promo-popup" class="promo-popup hidden" role="dialog" aria-label="Choose promotion piece">
   <div class="promo-card">
     <div class="promo-title">Promote to…</div>
     <div class="promo-buttons"></div>
     <button class="promo-cancel" type="button" aria-label="Cancel">Cancel</button>
+  </div>
+</div>
+
+<div id="discord-popup" class="discord-popup hidden" role="dialog"
+     aria-modal="true" aria-labelledby="discord-popup-title">
+  <div class="discord-card">
+    <div id="discord-popup-title" class="discord-title">Join the chessmsg Discord</div>
+    <div class="discord-frame-wrap">
+      <iframe id="discord-frame"
+              title="Discord server widget"
+              allowtransparency="true"
+              sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"></iframe>
+      <div id="discord-fallback" class="discord-fallback">
+        Discord server widget is not yet configured.
+        Set <code>PREFS.DISCORD_WIDGET_ID</code> in <code>script.js</code>.
+      </div>
+    </div>
+    <button id="discord-close" type="button" class="discord-close"
+            aria-label="Close">Close</button>
   </div>
 </div>
 

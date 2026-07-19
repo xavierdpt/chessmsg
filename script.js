@@ -5,11 +5,7 @@
 
   const PREFS = {
     A1_CLEAR_SOURCE_ON_OPP_NOT_DEST:  true,
-    A4_ROUTERIGHT_BEATS_SOURCESQ:     true,
-    A8_DEMOTE_PICKED_ON_REDEST_TAP:   true,
-    A10_REARM_SOURCE_ON_SAME_TAP:     true,
     A11_TAPS_ALLOWED_DURING_SEARCH:   true,
-    A12_TOGGLE_PREVIEW_CLEARS_SOURCE: true,
 
     ENABLE_PROMOTION_POPUP:           true,
     PROMOTION_DEFAULT_PIECE:          "q",
@@ -23,6 +19,10 @@
     SOURCE_TOGGLE_REQUIRES_SAME_SQ:   true,
     RESIZE_REDRAWS_ARROW:             true,
     PROMOTE_REQUIRES_PAWN_ON_7TH:     true,
+
+    DISCORD_BUTTON_MODE:              "widget",
+    DISCORD_INVITE_SLUG:              "chessmsg",
+    DISCORD_WIDGET_ID:                "1528008721853186191",
   };
 
   function pieceImageSrc(cell) {
@@ -35,7 +35,7 @@
     return "img/pieces/" + (color === "w" ? "w" : "b") + pieceCode.toUpperCase() + ".png";
   }
 
-  let chess, baseChess, san, pickedSan, previewSan, rowData, sourceSq;
+  let chess, baseChess, san, pickedSan, rowData, sourceSq;
   const $ = (s) => document.querySelector(s);
 
   function isPromotionMove(fromUci, toUci) {
@@ -276,7 +276,7 @@
     rowData = out;
   }
 
-  function cpBarWidth(label, turn) {
+  function cpBarWidth(label) {
     if (!label || label.kind !== "cp") return null;
     const pct = 50 - label.value / 20;
     return Math.max(0, Math.min(100, pct));
@@ -345,7 +345,7 @@
       for (const m of legal) {
         const rawCp = syntheticRawCp[m.san] != null ? syntheticRawCp[m.san] : -180;
         const label = { kind: "cp", value: rawCp };
-        const pct = cpBarWidth(label, t.turn());
+        const pct = cpBarWidth(label);
         console.log("[K] " + JSON.stringify({
           name: "post-bh6-row",
           san: m.san,
@@ -373,31 +373,22 @@
 
   function makeRow(idx, row) {
     const turn = baseChess.turn();
-    const isLeftClicked = row.san === previewSan;
-    const isRightClicked = row.san === pickedSan;
+    const isSelected = row.san === pickedSan;
     const el = document.createElement("div");
-    let cls = "row";
-    if (isLeftClicked) cls += " left-clicked";
-    if (isRightClicked) cls += " right-clicked";
-    el.className = cls;
-
-    const left = document.createElement("div");
-    left.className = "left";
-    left.onclick = function () { previewMove(idx); };
+    el.className = "row" + (isSelected ? " selected" : "");
 
     const sanSpan = document.createElement("span");
     sanSpan.className = "san";
     sanSpan.textContent = row.san;
-    left.appendChild(sanSpan);
+    el.appendChild(sanSpan);
 
     const scoreSpan = document.createElement("span");
     scoreSpan.className = "score";
     scoreSpan.textContent = fmtScore(row.label, turn);
-    left.appendChild(scoreSpan);
+    el.appendChild(scoreSpan);
 
-    const barWidth = cpBarWidth(row.label, turn);
+    const barWidth = cpBarWidth(row.label);
     const cells = mateCells(row.label, turn);
-
     if (barWidth !== null) {
       const bar = document.createElement("span");
       bar.className = "score-bar";
@@ -405,7 +396,7 @@
       fill.className = "score-bar-fill";
       fill.style.width = barWidth.toFixed(2) + "%";
       bar.appendChild(fill);
-      left.appendChild(bar);
+      el.appendChild(bar);
     } else if (cells) {
       const wrap = document.createElement("span");
       wrap.className = "score-cells " + cells.sign;
@@ -414,15 +405,9 @@
         cell.className = "score-cell";
         wrap.appendChild(cell);
       }
-      left.appendChild(wrap);
+      el.appendChild(wrap);
     }
 
-    const right = document.createElement("div");
-    right.className = "right";
-    right.onclick = function () { commitMove(idx); };
-
-    el.appendChild(left);
-    el.appendChild(right);
     return el;
   }
 
@@ -431,41 +416,94 @@
     list.innerHTML = "";
     rowData.forEach((row, idx) => list.appendChild(makeRow(idx, row)));
     layoutRowBars();
+    renderMinibar();
+  }
+
+  function renderMinibar() {
+    const bar = $("#minibar");
+    if (!bar) return;
+    bar.innerHTML = "";
+    if (!rowData) return;
+    for (const row of rowData) {
+      const rect = document.createElement("span");
+      rect.className = "mini-rect";
+      rect.dataset.san = row.san;
+      bar.appendChild(rect);
+    }
+    applyMinibarSelection();
+    layoutMinibar();
+  }
+
+  function applyMinibarSelection() {
+    const bar = $("#minibar");
+    if (!bar) return;
+    const rects = bar.querySelectorAll(".mini-rect");
+    rects.forEach((r) => r.classList.remove("on"));
+    if (!pickedSan) return;
+    for (const r of rects) {
+      if (r.dataset.san === pickedSan) {
+        r.classList.add("on");
+        break;
+      }
+    }
+  }
+
+  function layoutMinibar() {
+    const bar = $("#minibar");
+    const wrap = $("#moves-wrap");
+    const list = $("#moves");
+    if (!bar || !wrap || !list) return;
+    const rects = bar.children;
+    const n = rects.length;
+    if (!n) return;
+    const H = wrap.clientHeight;
+    if (!H) return;
+    const scrollable = list.scrollHeight > wrap.clientHeight + 0.5;
+    if (!scrollable) {
+      const sample = list.querySelector(".row");
+      const rowH = sample ? sample.offsetHeight : Math.round(H / n);
+      if (!rowH) return;
+      let acc = 0;
+      for (let i = 0; i < n; i++) {
+        const h = (i === n - 1) ? Math.max(0, H - acc) : rowH;
+        rects[i].style.height = h + "px";
+        acc += h;
+      }
+    } else {
+      const base = H / n;
+      let acc = 0;
+      for (let i = 0; i < n; i++) {
+        const h = (i === n - 1) ? Math.max(0, H - acc) : Math.floor(base);
+        rects[i].style.height = h + "px";
+        acc += h;
+      }
+    }
+  }
+
+  function updateEngineStatus() {
+    const el = $("#engine-status");
+    if (!el || !rowData) return;
+    const total = rowData.length;
+    let done = 0;
+    for (const r of rowData) if (r.label) done++;
+    if (total === 0 || done >= total) {
+      el.hidden = true;
+      el.textContent = "";
+    } else {
+      el.textContent = done + "/" + total;
+      el.hidden = false;
+    }
   }
 
   function layoutRowBars() {
-    const rows = Array.from(document.querySelectorAll("#moves .row"));
-    if (!rows.length) return;
-    let maxTextBlockWidth = 0;
-    for (const rowEl of rows) {
-      const sanEl = rowEl.querySelector(".san");
-      const scoreEl = rowEl.querySelector(".score");
-      if (!sanEl || !scoreEl) continue;
-      const tw = sanEl.offsetWidth + scoreEl.offsetWidth;
-      if (tw > maxTextBlockWidth) maxTextBlockWidth = tw;
-    }
-    for (const rowEl of rows) {
-      const leftHalf = rowEl.querySelector(".left");
-      const scoreEl = rowEl.querySelector(".score");
-      const barEl = rowEl.querySelector(".score-bar");
-      if (!leftHalf || !barEl) continue;
-      const cs = getComputedStyle(leftHalf);
-      const padL = parseFloat(cs.paddingLeft) || 0;
-      const padR = parseFloat(cs.paddingRight) || 0;
-      const leftInner = leftHalf.clientWidth - padL - padR;
-      const labelGap = scoreEl ? (parseFloat(getComputedStyle(scoreEl).marginLeft) || 0) : 0;
-      const fixedPadding = labelGap;
-      const barWidth = Math.max(0, leftInner - maxTextBlockWidth - fixedPadding);
-      barEl.style.width = barWidth + "px";
-    }
   }
 
   function rerender() {
     buildBoard();
     applySquareHighlights();
     renderMoveList();
-    const activeSan = previewSan || pickedSan;
-    const activeRow = activeSan ? rowData.find((r) => r.san === activeSan) : null;
+    updateEngineStatus();
+    const activeRow = pickedSan ? rowData.find((r) => r.san === pickedSan) : null;
     if (activeRow) {
       drawArrow(activeRow.fromIdx, activeRow.toIdx);
     } else {
@@ -499,14 +537,13 @@
   }
 
   function scrollActiveRowIntoView() {
-    const activeSan = previewSan || pickedSan;
-    if (!activeSan) return;
+    if (!pickedSan) return;
     const list = $("#moves");
     if (!list) return;
     const rows = list.querySelectorAll(".row");
     for (const rowEl of rows) {
       const sanEl = rowEl.querySelector(".san");
-      if (sanEl && sanEl.textContent === activeSan) {
+      if (sanEl && sanEl.textContent === pickedSan) {
         if (typeof rowEl.scrollIntoView === "function") {
           rowEl.scrollIntoView({ block: "nearest" });
         }
@@ -521,52 +558,33 @@
     btn.textContent = "Share";
   }
 
-  function previewMove(idx) {
+  function pickMove(idx) {
     const row = rowData[idx];
     if (!row) return;
-    if (previewSan === row.san) {
-      previewSan = null;
-      pickedSan = null;
-      if (PREFS.A12_TOGGLE_PREVIEW_CLEARS_SOURCE) sourceSq = null;
-      chess = new Chess(baseChess.fen());
-      rerender();
-      return;
-    }
-    pickedSan = null;
-    previewSan = row.san;
+    pickedSan = row.san;
     sourceSq = null;
-    chess = new Chess(baseChess.fen());
-    drawArrow(row.fromIdx, row.toIdx);
     rerender();
   }
 
-  function commitMove(idx) {
-    const row = rowData[idx];
-    if (!row) return;
-    if (pickedSan === row.san) {
-      pickedSan = null;
-      previewSan = null;
-      if (PREFS.A4_ROUTERIGHT_BEATS_SOURCESQ) sourceSq = null;
-      chess = new Chess(baseChess.fen());
-      rerender();
-      return;
-    }
-    pickedSan = row.san;
-    previewSan = null;
-    if (PREFS.A4_ROUTERIGHT_BEATS_SOURCESQ) sourceSq = null;
-    chess = new Chess(baseChess.fen());
-    const from = idxToSq(row.fromIdx);
-    const to   = idxToSq(row.toIdx);
-    const promotion = /^[a-h][18][a-h][18]$/.test(row.uci)
-      ? row.uci.slice(4) || "q"
-      : null;
-    const res = chess.move({ from: from, to: to, promotion: promotion || "q" });
+  function pickSyntheticPromotion(fromUci, toUci, pieceCode) {
+    const res = baseChess.move({ from: fromUci, to: toUci, promotion: pieceCode });
     if (!res) {
-      pickedSan = null;
-      rerender();
-      return;
+      baseChess.undo();
+      return false;
     }
+    const san = res.san;
+    baseChess.undo();
+    pickedSan = san;
+    sourceSq = null;
     rerender();
+    drawArrow(
+      cellIndex(fromUci[0], fromUci[1]),
+      cellIndex(toUci[0],   toUci[1])
+    );
+    if (PREFS.HAPTIC_ON_PROMOTION_PICK && navigator.vibrate) {
+      try { navigator.vibrate(20); } catch (_) {}
+    }
+    return true;
   }
 
   function onSquareClick(uci) {
@@ -575,7 +593,6 @@
 
     const cell = baseChess.get(uci);
     const isMine = cell && cell.color === baseChess.turn();
-    const isOpp  = cell && cell.color !== baseChess.turn();
 
     if (sourceSq) {
       if (uci === sourceSq) {
@@ -598,20 +615,20 @@
             showPromotionPopup(sourceSq, uci);
             return;
           }
-          previewPromotion(sourceSq, uci, PREFS.PROMOTION_DEFAULT_PIECE);
+          pickSyntheticPromotion(sourceSq, uci, PREFS.PROMOTION_DEFAULT_PIECE);
           return;
         }
         const row = rowForSourceDest(sourceSq, uci);
         if (row) {
           const idx = rowIndexForSan(row.san);
-          previewMove(idx);
+          pickMove(idx);
           return;
         }
         sourceSq = null;
         rerender();
         return;
       }
-      if (isOpp) {
+      if (PREFS.A1_CLEAR_SOURCE_ON_OPP_NOT_DEST && cell && !isMine) {
         sourceSq = null;
         rerender();
         return;
@@ -621,27 +638,6 @@
       return;
     }
 
-    if (pickedSan && isMine && isA10ReArmOnSameTap(uci)) {
-      sourceSq = uci;
-      rerender();
-      return;
-    }
-    if ((pickedSan || previewSan) && PREFS.A8_DEMOTE_PICKED_ON_REDEST_TAP && !isMine) {
-      const activeSan = pickedSan || previewSan;
-      const activeIdx = rowIndexForSan(activeSan);
-      const activeRow = activeIdx >= 0 ? rowData[activeIdx] : null;
-      if (activeRow) {
-        const activeTo = idxToSq(activeRow.toIdx);
-        if (uci === activeTo) {
-          pickedSan = null;
-          previewSan = null;
-          chess = new Chess(baseChess.fen());
-          clearArrows();
-          rerender();
-          return;
-        }
-      }
-    }
     if (isMine) {
       sourceSq = uci;
       rerender();
@@ -649,41 +645,10 @@
     }
   }
 
-  function isA10ReArmOnSameTap(uci) {
-    if (!PREFS.A10_REARM_SOURCE_ON_SAME_TAP) return false;
-    const san = previewSan || pickedSan;
-    if (!san) return false;
-    const row = rowData.find((r) => r.san === san);
-    if (!row) return false;
-    return idxToSq(row.fromIdx) === uci;
-  }
-
-  function previewPromotion(fromUci, toUci, pieceCode) {
-    const res = baseChess.move({ from: fromUci, to: toUci, promotion: pieceCode });
-    if (!res) {
-      baseChess.undo();
-      return false;
-    }
-    const san = res.san;
-    baseChess.undo();
-    sourceSq = null;
-    pickedSan = null;
-    previewSan = san;
-    chess = new Chess(baseChess.fen());
-    const fromIdx = cellIndex(fromUci[0], fromUci[1]);
-    const toIdx   = cellIndex(toUci[0],   toUci[1]);
-    drawArrow(fromIdx, toIdx);
-    if (PREFS.HAPTIC_ON_PROMOTION_PICK && navigator.vibrate) {
-      try { navigator.vibrate(20); } catch (_) {}
-    }
-    rerender();
-    return true;
-  }
-
   function showPromotionPopup(fromUci, toUci) {
     const popup = $("#promo-popup");
     if (!popup) {
-      previewPromotion(fromUci, toUci, PREFS.PROMOTION_DEFAULT_PIECE);
+      pickSyntheticPromotion(fromUci, toUci, PREFS.PROMOTION_DEFAULT_PIECE);
       return;
     }
     const buttonsWrap = popup.querySelector(".promo-buttons");
@@ -704,7 +669,19 @@
         const f = popup.dataset.fromUci;
         const t = popup.dataset.toUci;
         hidePromotionPopup();
-        previewPromotion(f, t, piece);
+        const moveRes = baseChess.move({ from: f, to: t, promotion: piece });
+        if (!moveRes) {
+          baseChess.undo();
+          return;
+        }
+        const movedSan = moveRes.san;
+        baseChess.undo();
+        const idx = rowIndexForSan(movedSan);
+        if (idx >= 0) {
+          pickMove(idx);
+        } else {
+          pickSyntheticPromotion(f, t, piece);
+        }
       });
       buttonsWrap.appendChild(btn);
     }
@@ -846,10 +823,83 @@
     sf.postMessage("uci");
   }
 
+  function openDiscordPopup() {
+    const popup = $("#discord-popup");
+    const frame = $("#discord-frame");
+    const fallback = $("#discord-fallback");
+    if (!popup || !frame || !fallback) return;
+
+    const id = (PREFS.DISCORD_WIDGET_ID || "").trim();
+    if (id && !frame.getAttribute("src")) {
+      frame.src = "https://discord.com/widget?id="
+                + encodeURIComponent(id)
+                + "&theme=dark";
+    }
+
+    if (id) {
+      frame.classList.remove("hidden");
+      fallback.classList.add("hidden");
+    } else {
+      frame.classList.add("hidden");
+      fallback.classList.remove("hidden");
+    }
+
+    popup.classList.remove("hidden");
+    const closeBtn = $("#discord-close");
+    if (closeBtn) closeBtn.focus({ preventScroll: true });
+  }
+
+  function closeDiscordPopup() {
+    const popup = $("#discord-popup");
+    if (!popup) return;
+    popup.classList.add("hidden");
+    const btn = $("#discord");
+    if (btn) btn.focus({ preventScroll: true });
+  }
+
+  function initDiscord() {
+    const btn = $("#discord");
+    if (!btn) return;
+
+    if (PREFS.DISCORD_BUTTON_MODE === "invite") {
+      const url = "https://discord.gg/" + PREFS.DISCORD_INVITE_SLUG;
+      btn.addEventListener("click", function () {
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+      btn.setAttribute("aria-label", "Open the chessmsg Discord invite");
+      btn.setAttribute("title",       "Open the chessmsg Discord invite");
+      return;
+    }
+
+    if (PREFS.DISCORD_BUTTON_MODE === "widget") {
+      btn.addEventListener("click", openDiscordPopup);
+      btn.setAttribute("aria-label", "Open the chessmsg Discord widget");
+      btn.setAttribute("title",       "Open the chessmsg Discord widget");
+      const closeBtn = $("#discord-close");
+      if (closeBtn) closeBtn.addEventListener("click", closeDiscordPopup);
+      const popup = $("#discord-popup");
+      if (popup) {
+        popup.addEventListener("click", function (e) {
+          if (e.target === popup) closeDiscordPopup();
+        });
+      }
+      document.addEventListener("keydown", function (e) {
+        if (!e) return;
+        if (e.key !== "Escape") return;
+        const p = $("#discord-popup");
+        if (p && !p.classList.contains("hidden")) closeDiscordPopup();
+      });
+      return;
+    }
+
+    console.warn("[chessmsg] unknown PREFS.DISCORD_BUTTON_MODE:", PREFS.DISCORD_BUTTON_MODE);
+    btn.disabled = true;
+    btn.setAttribute("aria-disabled", "true");
+  }
+
   function init() {
     san = parseInitialSan();
     pickedSan = null;
-    previewSan = null;
     sourceSq = null;
     baseChess = new Chess();
     if (san.length && !replaySan(baseChess, san)) {
@@ -859,11 +909,13 @@
     chess = new Chess(baseChess.fen());
     loadMoveRows();
     $("#share").addEventListener("click", doShare);
+    initDiscord();
     rerender();
     window.addEventListener("resize", function () {
       requestAnimationFrame(function () {
         layoutRowBars();
-        const activeRow = rowData ? rowData.find((r) => r.san === previewSan || r.san === pickedSan) : null;
+        layoutMinibar();
+        const activeRow = rowData ? rowData.find((r) => r.san === pickedSan) : null;
         if (activeRow) drawArrow(activeRow.fromIdx, activeRow.toIdx);
       });
     });
