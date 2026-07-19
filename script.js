@@ -85,13 +85,14 @@
 
   function cellIndex(f, r) {
     const fileIdx = FILES.indexOf(f);
-    if (baseChess.turn() === "b") return (Number(r) - 1) * 8 + fileIdx;
-    return (8 - Number(r)) * 8 + fileIdx;
+    const rank = Number(r);
+    if (baseChess.turn() === "b") return (rank - 1) * 8 + (7 - fileIdx);
+    return (8 - rank) * 8 + fileIdx;
   }
   function idxToSq(i) {
     const fileIdx = i % 8;
     const rowIdx = Math.floor(i / 8);
-    if (baseChess.turn() === "b") return FILES[fileIdx] + (rowIdx + 1);
+    if (baseChess.turn() === "b") return FILES[7 - fileIdx] + (rowIdx + 1);
     return FILES[fileIdx] + (8 - rowIdx);
   }
   function boardFlipped() {
@@ -112,11 +113,12 @@
     for (let r = 0; r < 8; r++) {
       for (let f = 0; f < 8; f++) {
         const rankRow = flipped ? (7 - r) : r;
-        const cell = rows[rankRow][f];
+        const fileIdx = flipped ? (7 - f) : f;
+        const cell = rows[rankRow][fileIdx];
         const sq = document.createElement("div");
-        sq.className = "sq " + (((rankRow + f) % 2 === 0) ? "light" : "dark");
+        sq.className = "sq " + (((rankRow + fileIdx) % 2 === 0) ? "light" : "dark");
         const uci = flipped
-          ? FILES[f] + (r + 1)
+          ? FILES[7 - f] + (r + 1)
           : FILES[f] + (8 - r);
         sq.dataset.uci = uci;
         sq.dataset.idx = (r * 8 + f);
