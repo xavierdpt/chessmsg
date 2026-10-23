@@ -241,6 +241,22 @@
     return n;
   }
 
+  const scoreCache = new Map();
+
+  function positionKey() {
+    return baseChess.fen().split(" ").slice(0, 4).join(" ");
+  }
+
+  function cachedScores() {
+    const key = positionKey();
+    let m = scoreCache.get(key);
+    if (!m) {
+      m = new Map();
+      scoreCache.set(key, m);
+    }
+    return m;
+  }
+
   function loadMoveRows() {
     const verbose = baseChess.moves({ verbose: true });
     const out = [];
@@ -268,6 +284,11 @@
         });
       }
     }
+    const cached = cachedScores();
+    for (const r of out) {
+      if (cached.has(r.san)) r.label = cached.get(r.san);
+    }
+    out.sort((a, b) => rankKey(b.label) - rankKey(a.label));
     rowData = out;
   }
 
@@ -583,7 +604,7 @@
       clearArrows();
     }
     scrollActiveRowIntoView();
-    updateShare();
+    updateActions();
   }
 
   function applySquareHighlights() {
@@ -625,10 +646,10 @@
     }
   }
 
-  function updateShare() {
-    const btn = $("#share");
-    btn.disabled = !pickedSan;
-    btn.textContent = "Share";
+  function updateActions() {
+    $("#share").disabled = !pickedSan;
+    $("#play").disabled = !pickedSan;
+    $("#back").disabled = !san.length;
   }
 
   function pickMove(idx) {
@@ -798,6 +819,40 @@
     }
   }
 
+  function setPosition(newSan, selected) {
+    const next = new Chess();
+    if (!replaySan(next, newSan)) return false;
+    san = newSan;
+    baseChess = next;
+    chess = new Chess(baseChess.fen());
+    pickedSan = selected || null;
+    sourceSq = null;
+    hidePromotionPopup();
+    posGen++;
+    if (sf && sfBusy) sf.postMessage("stop");
+    loadMoveRows();
+    syncUrl();
+    rerender();
+    pumpQueue();
+    return true;
+  }
+
+  function syncUrl() {
+    const u = new URL(location.href);
+    u.search = san.length ? "?san=" + san.join(",") : "";
+    try { history.replaceState(null, "", u.toString()); } catch (_) {}
+  }
+
+  function doPlay() {
+    if (!pickedSan) return;
+    setPosition(san.concat([pickedSan]), null);
+  }
+
+  function doBack() {
+    if (!san.length) return;
+    setPosition(san.slice(0, -1), san[san.length - 1]);
+  }
+
   function shareUrl() {
     const u = new URL(location.href);
     if (!pickedSan) {
@@ -837,6 +892,8 @@
   let sfReady = false;
   let sfBusy = false;
   let sfBusySan = null;
+  let sfBusyGen = 0;
+  let posGen = 0;
   let sfLastInfo = null;
 
   function handleEngineLine(line) {
@@ -854,10 +911,11 @@
         sfLastInfo = { kind: m[1], value: normalized };
       }
     } else if (line.indexOf("bestmove") === 0) {
-      if (sfBusySan && sfLastInfo) {
+      if (sfBusySan && sfLastInfo && sfBusyGen === posGen) {
         const idx = rowData.findIndex((r) => r.san === sfBusySan);
         if (idx >= 0 && !rowData[idx].label) {
           rowData[idx].label = sfLastInfo;
+          cachedScores().set(sfBusySan, sfLastInfo);
           rowData.sort((a, b) => rankKey(b.label) - rankKey(a.label));
           rerender();
         }
@@ -875,6 +933,7 @@
     if (!next) return;
     sfBusy = true;
     sfBusySan = next.san;
+    sfBusyGen = posGen;
     sfLastInfo = null;
     sf.postMessage("position fen " + baseChess.fen());
     sf.postMessage("go depth 15 searchmoves " + next.uci);
@@ -899,18 +958,10 @@
   }
 
   function init() {
-    san = parseInitialSan();
-    pickedSan = null;
-    sourceSq = null;
-    baseChess = new Chess();
-    if (san.length && !replaySan(baseChess, san)) {
-      baseChess = new Chess();
-      san = [];
-    }
-    chess = new Chess(baseChess.fen());
-    loadMoveRows();
+    if (!setPosition(parseInitialSan(), null)) setPosition([], null);
     $("#share").addEventListener("click", doShare);
-    rerender();
+    $("#play").addEventListener("click", doPlay);
+    $("#back").addEventListener("click", doBack);
     window.addEventListener("resize", function () {
       requestAnimationFrame(function () {
         layoutRowBars();
@@ -923,6 +974,15 @@
       if (!e) return;
       if (e.key === "Escape" && isPromotionPopupOpen()) {
         cancelPromotionPopup();
+        return;
+      }
+      if (isPromotionPopupOpen()) return;
+      if (e.key === "ArrowLeft") {
+        doBack();
+        return;
+      }
+      if (e.key === "Enter" && pickedSan && !(e.target && e.target.closest && e.target.closest("button"))) {
+        doPlay();
         return;
       }
       if (e.key === "k" || e.key === "K") {
