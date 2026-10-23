@@ -261,6 +261,23 @@
     :root { --cell: 11.5vw; }
     .row { font-size: 14px; }
   }
+  @media (min-width: 768px) and (min-aspect-ratio: 1/1) {
+    :root { --cell: min(calc((100vh - 32px) / 8), calc((100vw - 368px) / 8)); }
+    @supports (height: 100dvh) {
+      :root { --cell: min(calc((100dvh - 32px) / 8), calc((100vw - 368px) / 8)); }
+    }
+    body {
+      display: grid;
+      grid-template-columns: auto minmax(320px, 420px);
+      grid-template-rows: minmax(0, 1fr) auto;
+      justify-content: center;
+      column-gap: 16px;
+      padding: 16px;
+    }
+    #board-wrap { grid-column: 1; grid-row: 1 / 3; margin: 0; align-self: center; }
+    #list-row { grid-column: 2; grid-row: 1; border: 1px solid #e5e5e5; }
+    #share-row { grid-column: 2; grid-row: 2; }
+  }
 </style>
 </head>
 <body>
