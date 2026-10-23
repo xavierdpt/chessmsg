@@ -19,10 +19,6 @@
     SOURCE_TOGGLE_REQUIRES_SAME_SQ:   true,
     RESIZE_REDRAWS_ARROW:             true,
     PROMOTE_REQUIRES_PAWN_ON_7TH:     true,
-
-    DISCORD_BUTTON_MODE:              "widget",
-    DISCORD_INVITE_SLUG:              "chessmsg",
-    DISCORD_WIDGET_ID:                "1528008721853186191",
   };
 
   function pieceImageSrc(cell) {
@@ -902,80 +898,6 @@
     sf.postMessage("uci");
   }
 
-  function openDiscordPopup() {
-    const popup = $("#discord-popup");
-    const frame = $("#discord-frame");
-    const fallback = $("#discord-fallback");
-    if (!popup || !frame || !fallback) return;
-
-    const id = (PREFS.DISCORD_WIDGET_ID || "").trim();
-    if (id && !frame.getAttribute("src")) {
-      frame.src = "https://discord.com/widget?id="
-                + encodeURIComponent(id)
-                + "&theme=dark";
-    }
-
-    if (id) {
-      frame.classList.remove("hidden");
-      fallback.classList.add("hidden");
-    } else {
-      frame.classList.add("hidden");
-      fallback.classList.remove("hidden");
-    }
-
-    popup.classList.remove("hidden");
-    const closeBtn = $("#discord-close");
-    if (closeBtn) closeBtn.focus({ preventScroll: true });
-  }
-
-  function closeDiscordPopup() {
-    const popup = $("#discord-popup");
-    if (!popup) return;
-    popup.classList.add("hidden");
-    const btn = $("#discord");
-    if (btn) btn.focus({ preventScroll: true });
-  }
-
-  function initDiscord() {
-    const btn = $("#discord");
-    if (!btn) return;
-
-    if (PREFS.DISCORD_BUTTON_MODE === "invite") {
-      const url = "https://discord.gg/" + PREFS.DISCORD_INVITE_SLUG;
-      btn.addEventListener("click", function () {
-        window.open(url, "_blank", "noopener,noreferrer");
-      });
-      btn.setAttribute("aria-label", "Open the chessmsg Discord invite");
-      btn.setAttribute("title",       "Open the chessmsg Discord invite");
-      return;
-    }
-
-    if (PREFS.DISCORD_BUTTON_MODE === "widget") {
-      btn.addEventListener("click", openDiscordPopup);
-      btn.setAttribute("aria-label", "Open the chessmsg Discord widget");
-      btn.setAttribute("title",       "Open the chessmsg Discord widget");
-      const closeBtn = $("#discord-close");
-      if (closeBtn) closeBtn.addEventListener("click", closeDiscordPopup);
-      const popup = $("#discord-popup");
-      if (popup) {
-        popup.addEventListener("click", function (e) {
-          if (e.target === popup) closeDiscordPopup();
-        });
-      }
-      document.addEventListener("keydown", function (e) {
-        if (!e) return;
-        if (e.key !== "Escape") return;
-        const p = $("#discord-popup");
-        if (p && !p.classList.contains("hidden")) closeDiscordPopup();
-      });
-      return;
-    }
-
-    console.warn("[chessmsg] unknown PREFS.DISCORD_BUTTON_MODE:", PREFS.DISCORD_BUTTON_MODE);
-    btn.disabled = true;
-    btn.setAttribute("aria-disabled", "true");
-  }
-
   function init() {
     san = parseInitialSan();
     pickedSan = null;
@@ -988,7 +910,6 @@
     chess = new Chess(baseChess.fen());
     loadMoveRows();
     $("#share").addEventListener("click", doShare);
-    initDiscord();
     rerender();
     window.addEventListener("resize", function () {
       requestAnimationFrame(function () {
