@@ -82,17 +82,50 @@
   function cellIndex(f, r) {
     const fileIdx = FILES.indexOf(f);
     const rank = Number(r);
-    if (baseChess.turn() === "b") return (rank - 1) * 8 + (7 - fileIdx);
+    if (boardFlipped()) return (rank - 1) * 8 + (7 - fileIdx);
     return (8 - rank) * 8 + fileIdx;
   }
   function idxToSq(i) {
     const fileIdx = i % 8;
     const rowIdx = Math.floor(i / 8);
-    if (baseChess.turn() === "b") return FILES[7 - fileIdx] + (rowIdx + 1);
+    if (boardFlipped()) return FILES[7 - fileIdx] + (rowIdx + 1);
     return FILES[fileIdx] + (8 - rowIdx);
   }
+  const ORIENTATIONS = ["auto", "white", "black"];
+  const ORIENTATION_KEY = "chessmsg.orientation";
+  let orientation = "auto";
+
   function boardFlipped() {
+    if (orientation === "white") return false;
+    if (orientation === "black") return true;
     return baseChess.turn() === "b";
+  }
+
+  function loadOrientation() {
+    try {
+      const v = localStorage.getItem(ORIENTATION_KEY);
+      if (ORIENTATIONS.includes(v)) orientation = v;
+    } catch (_) {}
+  }
+
+  function updateOrientButton() {
+    const btn = $("#orient");
+    if (!btn) return;
+    const label = orientation === "white" ? "Board: White at bottom"
+                : orientation === "black" ? "Board: Black at bottom"
+                : "Board: side to move at bottom";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
+    btn.dataset.mode = orientation;
+  }
+
+  function cycleOrientation() {
+    const i = ORIENTATIONS.indexOf(orientation);
+    orientation = ORIENTATIONS[(i + 1) % ORIENTATIONS.length];
+    try { localStorage.setItem(ORIENTATION_KEY, orientation); } catch (_) {}
+    updateOrientButton();
+    loadMoveRows();
+    rerender();
   }
   function sqXY(idx, cellPx) {
     return {
@@ -958,10 +991,13 @@
   }
 
   function init() {
+    loadOrientation();
+    updateOrientButton();
     if (!setPosition(parseInitialSan(), null)) setPosition([], null);
     $("#share").addEventListener("click", doShare);
     $("#play").addEventListener("click", doPlay);
     $("#back").addEventListener("click", doBack);
+    $("#orient").addEventListener("click", cycleOrientation);
     window.addEventListener("resize", function () {
       requestAnimationFrame(function () {
         layoutRowBars();

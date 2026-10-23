@@ -218,6 +218,33 @@
     display: block;
   }
   #back[disabled] { color: #888; cursor: default; }
+  #orient {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none; border-radius: 0;
+    border-left: 1px solid #555;
+    background: #444; color: #fff;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #orient svg {
+    width: 26px;
+    height: 26px;
+    display: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  #orient[data-mode="auto"]  .ic-auto,
+  #orient[data-mode="white"] .ic-white,
+  #orient[data-mode="black"] .ic-black { display: block; }
   #play {
     flex: 1 1 auto;
     min-width: 0;
@@ -252,6 +279,23 @@
   <button id="back" type="button" disabled aria-label="Back" title="Back">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M15 5l-7 7 7 7"/>
+    </svg>
+  </button>
+  <button id="orient" type="button" data-mode="auto"
+          aria-label="Board: side to move at bottom" title="Board: side to move at bottom">
+    <svg class="ic-auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M19 9a7.5 7.5 0 0 0-13.2-2.6"/>
+      <path d="M5 4v3h3"/>
+      <path d="M5 15a7.5 7.5 0 0 0 13.2 2.6"/>
+      <path d="M19 20v-3h-3"/>
+    </svg>
+    <svg class="ic-white" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="4" y="4" width="16" height="16"/>
+      <rect x="4" y="12" width="16" height="8" fill="currentColor"/>
+    </svg>
+    <svg class="ic-black" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="4" y="4" width="16" height="16"/>
+      <rect x="4" y="4" width="16" height="8" fill="currentColor"/>
     </svg>
   </button>
   <button id="play" type="button" disabled>Play</button>
